@@ -1,0 +1,624 @@
+---
+title: "Examen Final Introduction to Data Science"
+author: "María Alejandra Torres León"
+date: "4/7/2021"
+keep_tex: true
+output:
+  bookdown::pdf_document2:
+    latex_engine: lualatex
+  tufte::tufte_handout:
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Primera parte
+
+## Árboles de decisión, Bagging y Random Forests
+El propósito de este ejercicio es predecir presencia de células cancerosas usando árboles de decisión, bagging y random forests. Para ello, usaremos la base wisc_bc_data.csv que utilizamos anteriormente.
+
+a. Cargue la base en un data frame llamado cancer. Inspeccione la base con la función str(). ¿Cuántas observaciones tiene la base? ¿Qué nombre tiene el outcome que nos interesa predecir?
+```{r}
+setwd("C:/Users/aleto/OneDrive - Universidad de los Andes/Intro DS")
+cancer<-read.csv("wisc_bc_data.csv", stringsAsFactors = TRUE)
+str(cancer)
+```
+La base tiene 569 observaciones. El outcome de interés es la variable llamada diagnosis. 
+
+b. Limpie los datos para poder implementar el algoritmo. Asegúrese de eliminar la variable de identificación. Además, convierta el outcome de interés en un factor. Por medio de una tabla de proporciones, determine qué porporción de los casos son benignos y malignos.
+```{r}
+cancer<-cancer[-1]
+cancer$diagnosis<-as.factor(cancer$diagnosis)
+prop.table(table(cancer$diagnosis))
+```
+
+c. Divida la base de datos en dos: 80% para entrenamiento y 20% para prueba. Para esto, aleatorice las filas que formarán parte de la base de entrenamiento y las de prueba. Fije la semilla como los últimos tres dígitos de su documento de identidad. Llame a sus bases de entrenamiento y prueba cancer_train y cancer_test. Inspeccione estas dos bases con la función str() y construya tablas de proporción para los outcomes en cada base. ¿Encuentra coherencia con las proporciones de la base original?
+
+```{r}
+set.seed(141)
+569*0.8
+train_sample<-sample(569, 455) #filas que componen la base de entrenamiento
+cancer_train<-cancer[train_sample,]
+cancer_test<-cancer[-train_sample,]
+
+str(cancer_train)
+str(cancer_test)
+
+prop.table(table(cancer_train$diagnosis))
+prop.table(table(cancer_test$diagnosis))
+```
+Las proporciones para la base de entrenamiento son muy similares a las de la base completa.Para la base de prueba se alejan un poco más de las proporciones originales, pero se mantiene que la proporción de células benignas es mayor a la de células malignas. Estas proporciones son coherentes pues surgen de una aleatorización y, por la ley de los grandes números, entre más grande sea la muestra, el valor tenderá al poblacional. Por esta razón, tiene sentido que la muestra de entrenamiento, que tiene muchas más observaciones, se acerca más a las proporciones originales.
+
+d. Utilizando el paquete C50 construya un árbol de decisión. ¿cuáles son las características de las biopsias más importantes al momento construir los subgrupos? ¿Qué porcentaje de precisión tiene el algoritmo sobre la base de entrenamiento? Realice la predicción sobre la base de prueba. Construya una tabla en la que represente en el eje X el verdadero diagnóstico de cada biopsia y en el eje Y las predicciones del modelo. ¿Qué tan preciso es el modelo? ¿Cuál es la proporción de falsos positivos? ¿De falsos negativos?
+
+```{r}
+library(C50)
+cancer_tree<-C5.0(cancer_train[-1], cancer_train$diagnosis)
+cancer_tree
+summary(cancer_tree)
+```
+Al construir el árbol de decisión, las características más importantes en las biopsias son el perímetro (100%) y el promedio de puntos cóncavos (70.99%). Frente a la precisión, puede verse que el algoritmo tiene una tasa de error de 1.5%, lo que indica que la precisión es muy buena y el algoritmo logra identificar correctamente las células cancerígenas. 
+```{r}
+library(gmodels)
+cancer_pred_tree<-predict(cancer_tree, cancer_test)
+CrossTable(cancer_test$diagnosis, cancer_pred_tree, prop.chisq = FALSE, prop.c=FALSE, prop.r=FALSE, dnn=c("Verdadero diagnóstico", "Predicción"))
+
+2/114 #Proporción de falsos positivos
+4/114 #Proporción de falsos negativos
+(2+4)/114 #Tasa de error
+(46+62)/144 #Precisión
+```
+Usando la matriz de confusión se puede ver que la proporción de falsos positivos es de 0,017, mientras que la de falsos negativos es de 0,035. La tasa de error es de 5% y, la precisión (accuracy) es de 75%. Lo anterior indica, nuevamente, que el modelo es muy bueno prediciendo el tipo de células cancerígenas.
+
+e. Repita el ejercicio anterior, pero esta vez usando bagging. ¿Mejora la precisón del modelo si se utiliza este procedimiento?
+
+```{r}
+library(randomForest)
+cancer_bag<-randomForest(x=cancer_train[-1], y=cancer_train$diagnosis, importance=TRUE, mtry=30)
+cancer_bag
+
+cancer_pred_bag<-predict(cancer_bag, cancer_test)
+CrossTable(cancer_test$diagnosis, cancer_pred_bag, prop.chisq = FALSE, prop.c=FALSE, prop.r=FALSE, dnn=c("Verdadero diagnóstico", "Predicción"))
+
+1/114 #Proporción de falsos positivos
+1/114 #Proporción de falsos negativos
+(1+1)/114 #Tasa de error
+(63+49)/114 #Precisión
+```
+Utilizando bagging, se obtiene un error de 4.18%. A partir de la predicción, se ve que la tasa de error cae a 1,75% y la precisión aumenta a 98%, lo que indica que mejora la precisión del modelo. Esto tiene sentido pues el método de bagging reduce el problema de varianza de entrenamiento, con lo que aumenta la probabilidad de que se escojan las variables en los árboles que mejor pronostiquen el resultado.  
+
+f. Ahora repita el ejercicio anterior, pero esta vez usando random forests. ¿Mejora la precisión del
+modelo si se utiliza este procedimiento?
+
+```{r}
+cancer_rf<-randomForest(x=cancer_train[-1], y=cancer_train$diagnosis, importance=TRUE)
+cancer_rf
+
+cancer_pred_rf<-predict(cancer_rf, cancer_test)
+CrossTable(cancer_test$diagnosis, cancer_pred_rf, prop.chisq = FALSE, prop.c=FALSE, prop.r=FALSE, dnn=c("Verdadero diagnóstico", "Predicción"))
+
+1/114 #Proporción de falsos positivos
+1/114 #Proporción de falsos negativos
+(1+1)/114 #Tasa de error
+(63+49)/114 #Precisión
+```
+Utilizando random forests, se obtiene un error de 3.74%, que representa una mejora respecto al modelo de bagging. Ahora bien, la predicción arroja los mismos resultados que el modelo de bagging. Esta mejora se explica porque este algoritmo aleatoriza las variables que se utilizan para la predicción a nivel de cada árbol. Como consecuencia, los árboles son menos parecidos entre sí frente al caso de bagging, pues a diferencia de este, no necesariamente tienen en cuenta la variable más importante para hacer la predicción. Esto reduce aún más la varianza y genera un pronóstico más preciso. 
+
+
+## Support Vector Machines
+
+Ahora buscamos predecir presencia de células cancerosas usando el algoritmo SVM. Para ello, usaremos nuevamente la base wisc bc data.csv.
+
+a. Cargue la base en un data frame llamado cancer. Divida la base de datos en dos: entrenamiento y prueba. Para esto, aleatorice las filas que formarán parte de la base de entrenamiento y las de prueba. Fije la semilla en su número de identificación. Llame a sus bases de entrenamiento y prueba cancer_train y cancer_test.
+
+```{r}
+cancer<-read.csv("wisc_bc_data.csv", stringsAsFactors = TRUE)
+
+set.seed(141)
+569*0.8
+train_sample<-sample(569, 455) #filas que componen la base de entrenamiento
+cancer_train<-cancer[train_sample,]
+cancer_test<-cancer[-train_sample,]
+```
+
+b. Utilizando el paquete kernlab construya un modelo SVM utilizando un kernel lineal. Construya la matriz de confusión utilizando el paquete caret. ¿Qué porcentaje de precisión tiene el algoritmo sobre la base de entrenamiento? ¿En qué cree usted que influye el uso de un kernel lineal?
+
+```{r}
+library(kernlab)
+library(caret)
+
+cancer_kern<-ksvm(diagnosis ~ ., data=cancer_train, kernel="vanilladot")
+cancer_kern
+
+cancer_pred<-predict(cancer_kern, cancer_test)
+
+confusionMatrix(cancer_pred, cancer_test$diagnosis, positive="M")
+``` 
+El porcentaje de precisión del algoritmo es de 98%, cercano al límite superior del intervalo de confianza. Este es un algoritmo con una precisión alta, en parte, como consecuencia del uso de un kernel lineal. En general, utilizar un kernel mejora la precisión porque toma en cuenta que los datos pueden no ser linealmente separables y los transforma para lograr la separación. En este caso, se utiliza una transformación lineal que, aunque no tiene un criterio específico para ser mejor que otras transformaciones, muestra una buena precisión.
+
+
+c. Nuevamente, usando el paquete kernlab realice la predicción sobre la base de prueba, pero en esta ocasión pruebe un kernel NO lineal. Construya la matriz de confusión utilizando el paquete caret ¿Qué porcentaje de precisión tiene el algoritmo sobre la base de entrenamiento? ¿Cuál es la proporción de falsos positivos? ¿De falsos negativos? ¿El cambio de kernel ayudó a mejorar el desempeño del modelo? Explique por qué los resultados cambian al modificar el tipo de kernel.
+
+```{r}
+library(kernlab)
+library(caret)
+
+cancer_kern_rbf<-ksvm(diagnosis ~ ., data=cancer_train, kernel="rbfdot")
+cancer_kern_rbf
+
+cancer_pred_rbf<-predict(cancer_kern_rbf, cancer_test)
+
+confusionMatrix(cancer_pred_rbf, cancer_test$diagnosis, positive="M")
+
+1/114
+``` 
+Para este caso, se tiene una precisión de 98%, una proporción de falsos positivos de 0,8% y de falsos negativos de 0,8%. Se puede ver que este modelo tiene una mejor precisión que el anterior, debido a la especificación del kernel. Para este caso se usó un kernel de función gaussiana RBF, que es una función no lineal. Aunque el kernel lineal cumpla la función de permitir la separación entre las variables, una función no lineal permite un mayor margen de ajuste para lograr la separación. Por tanto, es de esperarse que la separación de las observaciones sea más precisa con este tipo de funciones. Sin embargo, cabe mencionar que la elección de un kernel depende de un ejercicio de ensayo y error, pues no hay una regla clara para su escogencia. 
+
+
+(d) Finalmente, entrene un nuevo modelo pero esta vez usando la técnica de 10-Fold Cross-Validation. Construya la matriz de confusión y determine si el desempeño del modelo mejoró en comparación con los modelos anteriores.
+
+```{r}
+#Modelo con kernel lineal
+control<-trainControl(method = "cv", number=10)
+cancer_cv_l<-train(diagnosis ~ ., data=cancer_train, method="svmLinear", metric="Accuracy", trControl=control)
+
+cancer_pred_cv_l<-predict(cancer_cv_l, cancer_test)
+
+confusionMatrix(cancer_pred_cv_l, cancer_test$diagnosis, positive="M")
+
+```
+Para este caso se realiza la técnica de 10-fold cross-validation para el modelo con kernel lineal. Se puede ver que los resultados no cambian respecto a la predicción que se hizo inicialmente. Esto podría explicarse por que el primer algoritmo tuvo una precisión bastante alta, de manera que lo que podría aportar la técnica de cross-validation es mínimo. Otra posible explicación es que el número de observaciones es relativamente bajo. Por tanto, no hay mucha varianza entre los 10 ejercicios realizados y el promedio de estos termina siendo el mismo al del ejercicio inicial. 
+
+## Vecino más Cercano
+
+Para predecir el éxito o fracaso de una campaña de marketing de un banco portugués que ofrece CDTs a sus clientes, trabaje con los datos bank_sample.csv. Esta base tiene muchas menos observaciones que la original y algunas de sus variables han sido modificadas. Nuevamente, el outcome de interés, y, indica si el cliente adquiere el producto o no luego de que se le ofrece telefónicamente.
+
+a. Lea los datos por medio de un objeto llamado bank. Use la función str() para entender la estructura básica de los datos. ¿Cuántas observaciones hay? ¿Cuántas variables se incluyen?
+
+```{r}
+bank<-read.csv("bank_sample.csv", stringsAsFactors = TRUE)
+  str(bank)
+
+```
+Hay 4521 observaciones y 11 variables, incluyendo el outcome de interés, y. 
+
+b. Use las funciones table(), summary() y otras que considere pertinentes para entender las variables. ¿Qué proporción de los clientes adquieren el producto?
+
+```{r}
+table(bank$y)
+prop.table(table(bank$y))
+summary(bank)
+```
+Al revisar las variables puede verse que son características de los clientes y que están medidas en diferentes escalas. y corresponde al outcome de interés, es decir, si los clientes adquieren o no el producto. Solamente el 11% de los clientes adquieren el producto. 
+
+c. Reescale las variables de la base por medio de una normalización min-max de los datos. Para ello, cree una función que permita normalizar los datos. Tenga cuidado de hacer esto solamente para las variables independientes del modelo. Bautice a su nueva base de datos, tras la normalización, bank_n. Verifique, por medio de estadística descriptiva, que los datos estén en la misma escala y sean comparables.
+
+
+```{r}
+min_max <- function(x)
+{
+  return((x-min(x))/ (max(x)-min(x)))
+}
+
+bank_n<-as.data.frame(lapply(bank[1:10], min_max))
+summary(bank_n)
+```
+Todas las variables están acotadas entre 0 y 1, por lo que ahora sí son comparables.
+
+d. Cree un par de vectores, llamados bank_train_y y bank_test_y, que representen los outcomes de
+interés de los grupos de entrenamiento y prueba, respectivamente.
+
+```{r}
+bank_train_y<-bank[1:3521,11]
+bank_test_y<-bank[3522:4521,11]
+```
+
+e. Divida la base bank_n en dos partes: una con 3521 observaciones elegidas al azar para entrenar el modelo, y las restantes para probar el modelo. Llame a estas dos bases bank_n_train y bank_n_test, respectivamente. Fije como semilla los últimos tres dígitos de su documento de identidad para hacer esta aleatorización.
+
+```{r}
+set.seed(141)
+train_sample<-sample(4521, 3521) #filas que componen la base de entrenamiento
+bank_train<-bank_n[train_sample,]
+bank_test<-bank_n[-train_sample,]
+```
+
+f. Usando la heurística más utilizada para elegir k en este tipo de modelos, haga clasificación usando vecino más cercano (kNN). Presente en una tabla el resumen de las predicciones hechas para la base de prueba.
+
+```{r}
+sqrt(3521) # k=59
+
+library(class)
+bank_test_pred<-knn(bank_train, bank_test, cl=bank_train_y, k=59)
+bank_test_pred
+table(bank_test_pred)
+```
+La heurística más utilizada es aplicar la raíz cuadrada del número de observaciones de entrenamiento. En este caso, aproximadamente 59. Se puede ver que el modelo predice que ningún cliente va a adquirir el producto.
+
+g. ¿Qué tan precisos son los resultados? Considera usted que en este caso es preferible minimizar el número de falsos positivos o de falsos negativos? ¿Por qué? ¿Cree usted que el algoritmo kNN es el más apropiado para este tipo de datos?
+
+```{r}
+CrossTable(bank_test_y, bank_test_pred, prop.chisq = FALSE, prop.c=FALSE, prop.r=FALSE, dnn=c("Verdadero resultado", "Predicción"))
+881/1000 #Precisión
+1-(881/1000) #Tasa de error
+```
+Del algoritmo puede verse que la precisión del modelo es de 88%, a pesar de que este prediga que ningún cliente adquiere el producto. Si hubiese falsos negativos y falsos positivos, sería preferible minimizar el número de falsos positivos, es decir, el número de clientes a quienes se les ofrece el producto aunque no lo quieran. Esto, teniendo en cuenta que es una campaña de marketing y el banco preferiría mantener una imagen positiva al evitar molestar a sus clientes. 
+Sin embargo, puede que este algoritmo no sea el más apropiado, pues como se puede notar, no predice nada sobre quienes aceptarían el producto. Esto puede deberse al desbalance en el outcome de interés. Debido a que la proporción de clientes que no adquieren el producto es significativamente mayor, la predicción va a tomar eso en cuenta y se subestimará el número de personas que dirían que sí.
+
+# Segunda parte
+
+
+## Topic Modeling
+
+En este ejercicio encontraremos los temas de una base de datos de críticas de hoteles en Trip Advisor. La base de datos se llama datos trips.csv. Se encuentra como un archivo comprimido en el github de la clase.
+
+a. Explore la base de datos. Cuántas reviews hay? Qué información tenemos de cada una de ellas?
+
+```{r}
+setwd("C:/Users/aleto/OneDrive - Universidad de los Andes/Intro DS")
+trips<-read.csv("deceptive-opinion.csv", stringsAsFactors = TRUE)
+str(trips)
+summary(trips)
+names(trips)
+```
+En la base se pueden encontrar 1600 observaciones que corresponden a reviews. Para cada una se puede encontrar información sobre el hotel en el que se hospedan las personas, la fuente del review, si la información que se da es veraz o engañosa y la variable de sentimiento. 
+
+b. Limpie el texto de cada una de las reviews. Recuerde que el objetivo del análisis y que datos hay determinaran este paso.
+
+```{r}
+library(tidyverse)
+library(stringr)
+library(dslabs)
+library(textclean)
+library(tm)
+library("SnowballC")
+library(textstem)
+library(tidytext)
+library(topicmodels)
+library(LDAvis)
+
+
+limpiar<-function(text){
+  text<-replace_contraction(text)
+  text<-replace_symbol(text)
+  text<-replace_emoji(text)
+  text<-replace_emoticon(text)
+  text<-tolower(text)
+  text<-str_replace_all(text, "[[:punct:]]","")
+  text<-str_replace_all(text, "[^[:alnum:]]"," ") 
+  text<-str_replace_all(text, "[[:digit:]]+","") 
+  text<-removeWords(text, stopwords("en")) 
+  text<-stripWhitespace(text)
+  text<-str_trim(text) 
+}
+
+trips_clean<-trips %>% mutate(text=limpiar(text))
+trips_source<-VectorSource(trips_clean$text)
+typeof(trips_source)
+
+
+#Armar el corpus
+trips_corpus<-VCorpus(trips_source)
+summary(trips_corpus)
+trips_corpus[[20]]
+str(trips_corpus[[20]])
+
+#Documentos
+trip<-as.data.frame(trips_clean)
+trip<-trip%>% mutate(doc_id=row_number())%>%  select(doc_id, text)
+df_source<-DataframeSource(trip)
+df_corpus<-VCorpus(df_source)
+str(df_corpus[[1]])
+
+#Stem
+clean_corpus<-tm_map(trips_corpus, stemDocument)
+
+```
+
+c. Construya una nube de palabras con las 50 palabras más utilizadas después de la limpieza de los datos.
+
+```{r}
+
+trips_tdm<-TermDocumentMatrix(trips_corpus, list(weighting=weightTfIdf, sparse=TRUE))
+trips_tdm
+trips_tf<-TermDocumentMatrix(trips_corpus, list(sparse=TRUE))
+freq<-rowSums(as.matrix(trips_tf))
+
+findFreqTerms(trips_tdm, 50)
+freq<-data.frame(sort(rowSums(as.matrix(trips_tf)), decreasing=TRUE))
+library(wordcloud)
+library(wesanderson)
+head(freq)
+wordcloud(rownames(freq), freq[,1],max.words=50, colors = wes_palette("GrandBudapest2"))
+```
+d. Tokenize los datos y muestre una gráfica o tabla con la distribución de los token, es decir qué porcentaje aparece una vez, cual dos, etc.
+
+```{r}
+tokens_trips<-trip %>% select(doc_id, text) %>% unnest_tokens(word,text)
+
+tokens_trips %>%
+  group_by(doc_id) %>%
+  summarise(n_tokens=n())%>%
+  group_by(n_tokens) %>%
+  summarise(n_trips=n()) %>%
+  ggplot(aes(n_tokens, n_trips)) + geom_bar(stat="identity", fill="maroon")+ theme(panel.background = element_rect(fill = "white"))
+
+tokens_trips %>%
+  group_by(word) %>%
+  summarize(token_freq=n()) %>%
+  arrange(desc(token_freq)) %>%
+  head(20)
+
+```
+
+e. Decida si necesitamos quitar algunos tokens. Justifique el proceso con un par de lineas.
+
+```{r}
+
+words_remove<-c("e","us", "one", "get", "aaa", "th", "will")
+tokens_trips<-tokens_trips %>%
+  filter(!word %in% words_remove)
+
+tokens_trips %>%
+  group_by(word) %>%
+  summarise(token_freq=n())%>%
+  group_by(token_freq) %>%
+summarise(count=n()) %>%
+  mutate(prop=count/sum(count))
+
+
+tokens_trips_small<-tokens_trips %>%
+  group_by(word) %>%
+  mutate(token_freq=n())%>%
+  filter(token_freq>1)
+tokens_trips_small
+```
+Tiene sentido eliminar los tokens que se indican en la línea 557, pues son palabras con alta frecuencia que no tienen un aporte al análisis. Por ejemplo, son letras sin mucho sentido o palabras que podrían clasificarse como stop words en este contexto.
+
+f. Corra el LDA, justifique su elección inicial de k. En un par de oraciones describa que hace el algoritmo de LDA y cuales son las dos matrices que calcula.
+
+```{r}
+
+dtm<-tokens_trips_small %>%
+  cast_dtm(document=doc_id, term=word, value=token_freq)
+dtm
+
+lda_fit<-LDA(dtm, k=5)
+lda_fit@terms
+phi<-posterior(lda_fit)$terms %>% as.matrix()
+phi[,1:8]%>% as_tibble
+
+theta <- posterior(lda_fit)$topics %>% as.matrix
+dim(theta)
+
+theta[1:8,] %>% as_tibble() 
+```
+El k inicial se escoge según heurística. Es un número de topics lo suficientemente bajo para que el modelo no sea computacionalmente complejo. Asimismo, reconoce que, dado que los datos tienen un tema muy similar (viajes y estadías), incorporar más temas puede llevar a que se encuentren categorías muy específicas que no sean relevantes. 
+LDA es un algoritmo que permite estimar temas comunes para un grupo de palabras, basado en sus características y ubicación dentro de un texto. Con este algoritmo se obtienen dos matrices de co-ocurrencia: la de términos y la de temas. La de términos contiene la probabilidad de que aparezcan las palabras específicas, mientras que la de temas contiene la probabilidad de que aparezcan dentro de los temas.
+
+g. Construya una gráfica con las 10 palabras más probables por tema.
+
+```{r}
+topics <- tidy(lda_fit)
+plot1 <- topics %>%
+  mutate(topic = as.factor(paste0('Topic',topic))) %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  arrange(topic, -beta)
+names <- levels(unique(plot1$topic))
+colors <- RColorBrewer::brewer.pal(n=length(names),name="Set2")
+
+# grafica por tema 
+plist <- list()
+
+for (i in 1:length(names)) {
+  d <- subset(plot1,topic == names[i])[1:10,]
+  d$term <- factor(d$term, levels=d[order(d$beta),]$term)
+  
+  p1 <- ggplot(d, aes(x = term, y = beta, width=0.75)) + 
+  labs(y = NULL, x = NULL, fill = NULL) +
+  geom_bar(stat = "identity",fill=colors[i]) +
+  facet_wrap(~topic) +
+  coord_flip() +
+  guides(fill=FALSE) +
+  theme_bw() + theme(strip.background  = element_blank(),
+                     panel.grid.major = element_line(colour = "grey80"),
+                     panel.border = element_blank(),
+                     axis.ticks = element_line(size = 0),
+                     panel.grid.minor.y = element_blank(),
+                     panel.grid.major.y = element_blank() ) +
+  theme(legend.position="bottom") 
+
+  plist[[names[i]]] = p1
+}
+library(gridExtra)
+do.call("grid.arrange", c(plist, ncol=3))
+```
+
+h. Pruebe con un par de k’s distintas. Escriba lo que encuentra cuando modifica la k.
+
+```{r}
+
+#k=3
+
+lda_fit<-LDA(dtm, k=3)
+lda_fit@terms
+phi<-posterior(lda_fit)$terms %>% as.matrix()
+phi[,1:8]%>% as_tibble
+
+theta <- posterior(lda_fit)$topics %>% as.matrix
+dim(theta)
+
+theta[1:8,] %>% as_tibble() 
+
+topics <- tidy(lda_fit)
+plot1 <- topics %>%
+  mutate(topic = as.factor(paste0('Topic',topic))) %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  arrange(topic, -beta)
+names <- levels(unique(plot1$topic))
+colors <- RColorBrewer::brewer.pal(n=length(names),name="Set2")
+
+# grafica por tema 
+plist <- list()
+
+for (i in 1:length(names)) {
+  d <- subset(plot1,topic == names[i])[1:10,]
+  d$term <- factor(d$term, levels=d[order(d$beta),]$term)
+  
+  p1 <- ggplot(d, aes(x = term, y = beta, width=0.75)) + 
+  labs(y = NULL, x = NULL, fill = NULL) +
+  geom_bar(stat = "identity",fill=colors[i]) +
+  facet_wrap(~topic) +
+  coord_flip() +
+  guides(fill=FALSE) +
+  theme_bw() + theme(strip.background  = element_blank(),
+                     panel.grid.major = element_line(colour = "grey80"),
+                     panel.border = element_blank(),
+                     axis.ticks = element_line(size = 0),
+                     panel.grid.minor.y = element_blank(),
+                     panel.grid.major.y = element_blank() ) +
+  theme(legend.position="bottom") 
+
+  plist[[names[i]]] = p1
+}
+library(gridExtra)
+do.call("grid.arrange", c(plist, ncol=3))
+
+#k=7
+
+
+lda_fit<-LDA(dtm, k=7)
+lda_fit@terms
+phi<-posterior(lda_fit)$terms %>% as.matrix()
+phi[,1:8]%>% as_tibble
+
+theta <- posterior(lda_fit)$topics %>% as.matrix
+dim(theta)
+
+theta[1:8,] %>% as_tibble() 
+
+topics <- tidy(lda_fit)
+plot1 <- topics %>%
+  mutate(topic = as.factor(paste0('Topic',topic))) %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  arrange(topic, -beta)
+names <- levels(unique(plot1$topic))
+colors <- RColorBrewer::brewer.pal(n=length(names),name="Set2")
+
+# grafica por tema 
+plist <- list()
+
+for (i in 1:length(names)) {
+  d <- subset(plot1,topic == names[i])[1:10,]
+  d$term <- factor(d$term, levels=d[order(d$beta),]$term)
+  
+  p1 <- ggplot(d, aes(x = term, y = beta, width=0.75)) + 
+  labs(y = NULL, x = NULL, fill = NULL) +
+  geom_bar(stat = "identity",fill=colors[i]) +
+  facet_wrap(~topic) +
+  coord_flip() +
+  guides(fill=FALSE) +
+  theme_bw() + theme(strip.background  = element_blank(),
+                     panel.grid.major = element_line(colour = "grey80"),
+                     panel.border = element_blank(),
+                     axis.ticks = element_line(size = 0),
+                     panel.grid.minor.y = element_blank(),
+                     panel.grid.major.y = element_blank() ) +
+  theme(legend.position="bottom") 
+
+  plist[[names[i]]] = p1
+}
+library(gridExtra)
+do.call("grid.arrange", c(plist, ncol=3))
+```
+Tomando k=3 y k=7, se encuentra que cambia el número de temas sobre los que se hace el análisis. Estos resultados muestran que entre mayor sea k, el número de temas, los grupos van a ser más específicos. Cuando k tiende a 1, todas las palabras entran en el mismo tema y no se puede ver la división entre categorías, mientras que si k tiende a n, se tiene que cada tema corresponde a una sola palabra y no se puede analizar cómo se relacionan entre ellas. 
+
+i. Escoja uno de los modelos que corrió e intente describir que representa cada uno de los temas.
+
+Con k=5 se pueden identificar como temas 1. palabras que describen el viaje, 2. palabras relacionadas con la ubicación, 3. palabras relacionadas con la estadía en un hotel, 4 y 5. palabras relacionadas con un sentimiento positivo. 
+Vale la pena notar que hay palabras repetidas entre los temas y que los dos últimos son muy similares. Esto podría mostrar que se puede encontrar un mejor k que identifique los temas de forma más detallada, o que las palabras más repetidas tienen relevancia en distintos contextos.
+
+## Análisis de Componentes Principales
+
+Utilizaremos la base de datos USArrests, dentro de tidyverse.
+
+a. Explore la base de datos. Cuántas observaciones y cuántas variables tenemos?
+
+```{r}
+library(tidyverse)
+arrests<-USArrests
+summary(arrests)
+str(arrests)
+arrests %>% head(10)
+```
+La base de datos tiene 50 observaciones y 4 variables: asesinatos, muertes, población urbana y violaciones. Las observaciones corresponden a los estados de Estados Unidos.
+
+b. Utilice la libraría tidymodels para llevar a cabo un análisis de componentes principales, recuerde normalizar las variables.
+
+```{r}
+library(tidymodels)
+library(tidyverse)
+arrests<-arrests %>% mutate(id=row_number())
+estados<-row.names(arrests)
+arrests<-arrests %>% mutate(id=estados)
+arrests_n<-recipe(~., data=arrests) %>% 
+  update_role(id, new_role = "id") %>%
+  step_normalize(all_predictors()) %>%
+step_pca(all_predictors())
+
+```
+
+c. Cuántos componentes principales hay? 
+```{r}
+arrests_pca<-prep(arrests_n)
+arrests_pca
+summary(arrests_pca)
+juice(arrests_pca)
+```
+Hay cuatro componentes principales.
+
+d. Muestre sus resultados en una gráfica que incluya el nombre de cada uno de los Estados.
+
+```{r}
+juice(arrests_pca) %>%
+  ggplot(aes(PC1,PC2)) + 
+  geom_point(aes(color = id))+ theme(panel.background = element_rect(fill = "white"))
+
+```
+
+e. Cómo podemos interpretar el componente principal 1 y el 2? f. Cómo interpretamos Estados cerca del centro de esta gráfica?
+
+
+```{r}
+tidy_pca <- tidy(arrests_pca, 2)
+
+tidy_pca %>%
+  filter(component %in% paste0("PC", 1:3)) %>%
+  mutate(component = fct_inorder(component)) %>%
+  ggplot(aes(value, terms, fill = terms)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~component, nrow = 1) +
+  labs(y = NULL)+theme(panel.background = element_rect(fill = "white"))
+```
+El componente principal muestra que las variables que menos contribuyen a llevar a cabo arrestos están relacionadas con los crímenes cometidos. Por el contrario, el segundo componente muestra que la población urbana contribue en menor medida, mientras que los asesinatos y robos contribuyen positivamente. En general, los Estados que están en el centro de la gráfica son aquellos que tienen menos varianza, o que están fuertemente correlacionados. En este contexto, son Estados en los que el número de arrestos tiene una razón similar según los componentes. 
+
+g. Muestre en una gráfica que porcentaje de la varianza explica cada uno de los componentes.
+
+```{r}
+sd <- arrests_pca$steps[[2]]$res$sdev
+percent_variation <- sd^2 / sum(sd^2)
+var_df <- data.frame(PC=paste0("PC",1:length(sd)),
+                     var_explained=percent_variation,
+                     stringsAsFactors = FALSE)
+var_df %>%
+  mutate(PC = fct_inorder(PC)) %>%
+  ggplot(aes(x=PC,y=var_explained))+geom_col(aes(fill = "red")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+h. Discuta los beneficios de esta técnica y si sería razonable en nuestro ejemplo usar solo los PC y no todas las variables.
+
+Esta técnica tiene como beneficio que reduce la cantidad de variables para el análisis usando su varianza. Esto es beneficioso porque reduce potencialmente la correlación entre las variables. Sin embargo, para este caso particular, no aporta significativamente al análisis. Esto, teniendo en cuenta que solo se tienen 4 variables, que incluso, es el mismo número de componentes principales. Asimismo, se ve que los datos están muy dispersos en la gráfica, lo que indica que no se está viendo una relación clara de correlaciones entre ellos.
