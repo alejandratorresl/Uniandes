@@ -9,6 +9,7 @@
 * This code is part of my final coursework for the Advanced Econometrics course. For this project, I explore the effect of IMF programs on development,
 * using the Human Development Index (HDI) as a proxy. For this, I estimate the causal effect of the program using an event study and difference in difference models
 * with different specifications (basic model, dynamic model, heterogeneous effects).
+* The dataset is "International Political Economy Data Resource" (Graham & Tucker, 2018).
 
 cd ""
 
